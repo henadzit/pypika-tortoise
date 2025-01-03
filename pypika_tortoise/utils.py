@@ -74,7 +74,8 @@ def resolve_is_aggregate(values: list[bool | None]) -> bool | None:
 
 
 def format_quotes(value: Any, quote_char: str | None) -> str:
-    return "{quote}{value}{quote}".format(value=value, quote=quote_char or "")
+    return quote_char + value + quote_char
+    # return "{quote}{value}{quote}".format(value=value, quote=quote_char or "")
 
 
 def format_alias_sql(
