@@ -877,9 +877,7 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
         """
 
         self._from.append(
-            Table(selectable)
-            if isinstance(selectable, str)
-            else selectable  # type:ignore[arg-type]
+            Table(selectable) if isinstance(selectable, str) else selectable  # type:ignore[arg-type]
         )
 
         if isinstance(selectable, (QueryBuilder, _SetOperation)) and selectable.alias is None:
@@ -1587,10 +1585,15 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
 
     def _select_sql(self, ctx: SqlContext) -> str:
         select_ctx = ctx.copy(subquery=True, with_alias=True)
-        return "SELECT {distinct}{select}".format(
-            distinct=self._distinct_sql(ctx),
-            select=",".join(term.get_sql(select_ctx) for term in self._selects),
+        return (
+            "SELECT "
+            + self._distinct_sql(ctx)
+            + ",".join(term.get_sql(select_ctx) for term in self._selects)
         )
+        # return "SELECT {distinct}{select}".format(
+        #     distinct=self._distinct_sql(ctx),
+        #     select=",".join(term.get_sql(select_ctx) for term in self._selects),
+        # )
 
     def _insert_sql(self, ctx: SqlContext) -> str:
         table = self._insert_table.get_sql(ctx)  # type:ignore[union-attr]
@@ -1777,17 +1780,16 @@ class Joiner:
     def on_field(self, *fields: Any) -> QueryBuilder:
         if not fields:
             raise JoinException(
-                "Parameter 'fields' is required for a "
-                "{type} JOIN but was not supplied.".format(type=self.type_label)
+                "Parameter 'fields' is required for a {type} JOIN but was not supplied.".format(
+                    type=self.type_label
+                )
             )
 
         criterion = None
         for field in fields:
             consituent = Field(field, table=self.query._from[0]) == Field(field, table=self.item)
             criterion = (
-                consituent
-                if criterion is None
-                else (criterion & consituent)  # type:ignore[operator]
+                consituent if criterion is None else (criterion & consituent)  # type:ignore[operator]
             )
 
         self.query.do_join(JoinOn(self.item, self.how, criterion))  # type:ignore[arg-type]
@@ -2191,7 +2193,8 @@ class CreateQueryBuilder:
 
     def _primary_key_clause(self, ctx: SqlContext) -> str:
         columns = ",".join(
-            column.get_name_sql(ctx) for column in self._primary_key  # type:ignore[union-attr]
+            column.get_name_sql(ctx)
+            for column in self._primary_key  # type:ignore[union-attr]
         )
         return f"PRIMARY KEY ({columns})"
 

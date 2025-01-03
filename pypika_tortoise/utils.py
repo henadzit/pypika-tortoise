@@ -85,11 +85,7 @@ def format_alias_sql(
 ) -> str:
     if alias is None:
         return sql
-    return "{sql}{_as}{alias}".format(
-        sql=sql,
-        _as=" AS " if ctx.as_keyword else " ",
-        alias=format_quotes(alias, ctx.alias_quote_char or ctx.quote_char),
-    )
+    return sql + (" AS " if ctx.as_keyword else " ") + format_quotes(alias, ctx.alias_quote_char or ctx.quote_char)
 
 
 def validate(*args: Any, exc: Exception | None = None, type: Type | None = None) -> None:
