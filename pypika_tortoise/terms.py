@@ -638,14 +638,10 @@ class Field(Criterion, JSON):
         # Need to add namespace if the table has an alias
         if self.table and (ctx.with_namespace or self.table.alias):
             table_name = self.table.get_table_name()
-            field_sql = "{namespace}.{name}".format(
-                namespace=format_quotes(table_name, ctx.quote_char),
-                name=field_sql,
-            )
+            field_sql = format_quotes(table_name, ctx.quote_char) + "." + field_sql
 
-        field_alias = getattr(self, "alias", None)
         if ctx.with_alias:
-            return format_alias_sql(field_sql, field_alias, ctx)
+            return format_alias_sql(field_sql, self.alias, ctx)
         return field_sql
 
 

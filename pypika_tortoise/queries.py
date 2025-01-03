@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from copy import copy
 from functools import reduce
+from io import StringIO
 from typing import TYPE_CHECKING, Any, Sequence, Type, cast, overload
 
 from .context import DEFAULT_SQL_CONTEXT, SqlContext
@@ -876,9 +877,7 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
         """
 
         self._from.append(
-            Table(selectable)
-            if isinstance(selectable, str)
-            else selectable  # type:ignore[arg-type]
+            Table(selectable) if isinstance(selectable, str) else selectable  # type:ignore[arg-type]
         )
 
         if isinstance(selectable, (QueryBuilder, _SetOperation)) and selectable.alias is None:
@@ -1414,112 +1413,119 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
             )
         )
 
+        querystring = StringIO()
         if self._update_table:
             if self._with:
-                querystring = self._with_sql(ctx)
-            else:
-                querystring = ""
+                querystring.write(self._with_sql(ctx))
+            # else:
+            # querystring = ""
 
-            querystring += self._update_sql(ctx)
+            querystring.write(self._update_sql(ctx))
 
             if self._joins:
-                querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
+                querystring.write(" ")
+                querystring.write(" ".join(join.get_sql(ctx) for join in self._joins))
+                # querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
 
-            querystring += self._set_sql(ctx)
+            querystring.write(self._set_sql(ctx))
 
             if self._from:
-                querystring += self._from_sql(ctx)
+                querystring.write(self._from_sql(ctx))
 
             if self._wheres:
-                querystring += self._where_sql(ctx)
+                querystring.write(self._where_sql(ctx))
 
-            return querystring
+            return querystring.getvalue()
 
         if self._delete_from:
-            querystring = self._delete_sql(ctx)
+            querystring.write(self._delete_sql(ctx))
 
         elif not self._select_into and self._insert_table:
             if self._with:
-                querystring = self._with_sql(ctx)
-            else:
-                querystring = ""
+                querystring.write(self._with_sql(ctx))
+            # else:
+            # querystring = ""
 
             if self._replace:
-                querystring += self._replace_sql(ctx)
+                querystring.write(self._replace_sql(ctx))
             else:
-                querystring += self._insert_sql(ctx)
+                querystring.write(self._insert_sql(ctx))
 
             if self._columns:
-                querystring += self._columns_sql(ctx)
+                querystring.write(self._columns_sql(ctx))
 
             if self._values:
-                querystring += self._values_sql(ctx)
+                querystring.write(self._values_sql(ctx))
                 if self._on_conflict:
-                    querystring += self._on_conflict_sql(ctx)
-                    querystring += self._on_conflict_action_sql(ctx)
-                return querystring
+                    querystring.write(self._on_conflict_sql(ctx))
+                    querystring.write(self._on_conflict_action_sql(ctx))
+                return querystring.getvalue()
             else:
-                querystring += " " + self._select_sql(ctx)
+                querystring.write(" ")
+                querystring.write(self._select_sql(ctx))
 
         else:
             if self._with:
-                querystring = self._with_sql(ctx)
-            else:
-                querystring = ""
+                querystring.write(self._with_sql(ctx))
+            # else:
+            # querystring = ""
 
-            querystring += self._select_sql(ctx)
+            querystring.write(self._select_sql(ctx))
 
             if self._insert_table:
-                querystring += self._into_sql(ctx)
+                querystring.write(self._into_sql(ctx))
 
         if self._from:
-            querystring += self._from_sql(ctx)
+            querystring.write(self._from_sql(ctx))
 
         if self._force_indexes:
-            querystring += self._force_index_sql(ctx)
+            querystring.write(self._force_index_sql(ctx))
 
         if self._use_indexes:
-            querystring += self._use_index_sql(ctx)
+            querystring.write(self._use_index_sql(ctx))
 
         if self._joins:
-            querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
+            # querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
+            querystring.write(" ")
+            querystring.write(" ".join(join.get_sql(ctx) for join in self._joins))
 
         if self._prewheres:
-            querystring += self._prewhere_sql(ctx)
+            querystring.write(self._prewhere_sql(ctx))
 
         if self._wheres:
-            querystring += self._where_sql(ctx)
+            querystring.write(self._where_sql(ctx))
 
         if self._groupbys:
-            querystring += self._group_sql(ctx)
+            querystring.write(self._group_sql(ctx))
             if self._mysql_rollup:
-                querystring += self._rollup_sql()
+                querystring.write(self._rollup_sql())
 
         if self._havings:
-            querystring += self._having_sql(ctx)
+            querystring.write(self._having_sql(ctx))
 
         if self._orderbys:
-            querystring += self._orderby_sql(ctx)
+            querystring.write(self._orderby_sql(ctx))
 
-        querystring = self._apply_pagination(querystring, ctx)
+        self._apply_pagination(querystring, ctx)
 
         if self._for_update:
-            querystring += self._for_update_sql(ctx)
+            querystring.write(self._for_update_sql(ctx))
+
+        querystring_str = querystring.getvalue()
 
         if ctx.subquery:
-            querystring = "({query})".format(query=querystring)
+            querystring_str = "({query})".format(query=querystring)
         if self._on_conflict:
-            querystring += self._on_conflict_sql(ctx)
-            querystring += self._on_conflict_action_sql(ctx)
+            querystring_str += self._on_conflict_sql(ctx)
+            querystring_str += self._on_conflict_action_sql(ctx)
         if ctx.with_alias:
-            return format_alias_sql(querystring, self.alias, ctx)
+            return format_alias_sql(querystring_str, self.alias, ctx)
 
-        return querystring
+        return querystring_str
 
-    def _apply_pagination(self, querystring: str, ctx: SqlContext) -> str:
-        querystring += self._limit_sql(ctx)
-        querystring += self._offset_sql(ctx)
-        return querystring
+    def _apply_pagination(self, querystring: StringIO, ctx: SqlContext) -> None:
+        querystring.write(self._limit_sql(ctx))
+        querystring.write(self._offset_sql(ctx))
 
     def _with_sql(self, ctx: SqlContext) -> str:
         all_alias = [with_.alias for with_ in self._with]
@@ -1579,10 +1585,15 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
 
     def _select_sql(self, ctx: SqlContext) -> str:
         select_ctx = ctx.copy(subquery=True, with_alias=True)
-        return "SELECT {distinct}{select}".format(
-            distinct=self._distinct_sql(ctx),
-            select=",".join(term.get_sql(select_ctx) for term in self._selects),
+        return (
+            "SELECT "
+            + self._distinct_sql(ctx)
+            + ",".join(term.get_sql(select_ctx) for term in self._selects)
         )
+        # return "SELECT {distinct}{select}".format(
+        #     distinct=self._distinct_sql(ctx),
+        #     select=",".join(term.get_sql(select_ctx) for term in self._selects),
+        # )
 
     def _insert_sql(self, ctx: SqlContext) -> str:
         table = self._insert_table.get_sql(ctx)  # type:ignore[union-attr]
@@ -1769,17 +1780,16 @@ class Joiner:
     def on_field(self, *fields: Any) -> QueryBuilder:
         if not fields:
             raise JoinException(
-                "Parameter 'fields' is required for a "
-                "{type} JOIN but was not supplied.".format(type=self.type_label)
+                "Parameter 'fields' is required for a {type} JOIN but was not supplied.".format(
+                    type=self.type_label
+                )
             )
 
         criterion = None
         for field in fields:
             consituent = Field(field, table=self.query._from[0]) == Field(field, table=self.item)
             criterion = (
-                consituent
-                if criterion is None
-                else (criterion & consituent)  # type:ignore[operator]
+                consituent if criterion is None else (criterion & consituent)  # type:ignore[operator]
             )
 
         self.query.do_join(JoinOn(self.item, self.how, criterion))  # type:ignore[arg-type]
@@ -2183,7 +2193,8 @@ class CreateQueryBuilder:
 
     def _primary_key_clause(self, ctx: SqlContext) -> str:
         columns = ",".join(
-            column.get_name_sql(ctx) for column in self._primary_key  # type:ignore[union-attr]
+            column.get_name_sql(ctx)
+            for column in self._primary_key  # type:ignore[union-attr]
         )
         return f"PRIMARY KEY ({columns})"
 
