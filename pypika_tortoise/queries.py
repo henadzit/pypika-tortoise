@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from copy import copy
 from functools import reduce
-from io import StringIO
 from typing import TYPE_CHECKING, Any, Sequence, Type, cast, overload
 
 from .context import DEFAULT_SQL_CONTEXT, SqlContext
@@ -877,7 +876,9 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
         """
 
         self._from.append(
-            Table(selectable) if isinstance(selectable, str) else selectable  # type:ignore[arg-type]
+            Table(selectable)
+            if isinstance(selectable, str)
+            else selectable  # type:ignore[arg-type]
         )
 
         if isinstance(selectable, (QueryBuilder, _SetOperation)) and selectable.alias is None:
@@ -1413,119 +1414,120 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
             )
         )
 
-        querystring = StringIO()
+        querystring = []
         if self._update_table:
             if self._with:
-                querystring.write(self._with_sql(ctx))
+                querystring.append(self._with_sql(ctx))
             # else:
             # querystring = ""
 
-            querystring.write(self._update_sql(ctx))
+            querystring.append(self._update_sql(ctx))
 
             if self._joins:
-                querystring.write(" ")
-                querystring.write(" ".join(join.get_sql(ctx) for join in self._joins))
+                querystring.append(" ")
+                querystring.append(" ".join(join.get_sql(ctx) for join in self._joins))
                 # querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
 
-            querystring.write(self._set_sql(ctx))
+            querystring.append(self._set_sql(ctx))
 
             if self._from:
-                querystring.write(self._from_sql(ctx))
+                querystring.append(self._from_sql(ctx))
 
             if self._wheres:
-                querystring.write(self._where_sql(ctx))
+                querystring.append(self._where_sql(ctx))
 
-            return querystring.getvalue()
+            return "".join(querystring)
 
         if self._delete_from:
-            querystring.write(self._delete_sql(ctx))
+            querystring.append(self._delete_sql(ctx))
 
         elif not self._select_into and self._insert_table:
             if self._with:
-                querystring.write(self._with_sql(ctx))
+                querystring.append(self._with_sql(ctx))
             # else:
             # querystring = ""
 
             if self._replace:
-                querystring.write(self._replace_sql(ctx))
+                querystring.append(self._replace_sql(ctx))
             else:
-                querystring.write(self._insert_sql(ctx))
+                querystring.append(self._insert_sql(ctx))
 
             if self._columns:
-                querystring.write(self._columns_sql(ctx))
+                querystring.append(self._columns_sql(ctx))
 
             if self._values:
-                querystring.write(self._values_sql(ctx))
+                querystring.append(self._values_sql(ctx))
                 if self._on_conflict:
-                    querystring.write(self._on_conflict_sql(ctx))
-                    querystring.write(self._on_conflict_action_sql(ctx))
-                return querystring.getvalue()
+                    querystring.append(self._on_conflict_sql(ctx))
+                    querystring.append(self._on_conflict_action_sql(ctx))
+                return "".join(querystring)
             else:
-                querystring.write(" ")
-                querystring.write(self._select_sql(ctx))
+                querystring.append(" ")
+                self._select_sql(querystring, ctx)
 
         else:
             if self._with:
-                querystring.write(self._with_sql(ctx))
+                querystring.append(self._with_sql(ctx))
             # else:
             # querystring = ""
 
-            querystring.write(self._select_sql(ctx))
+            self._select_sql(querystring, ctx)
 
             if self._insert_table:
-                querystring.write(self._into_sql(ctx))
+                querystring.append(self._into_sql(ctx))
 
         if self._from:
-            querystring.write(self._from_sql(ctx))
+            querystring.append(self._from_sql(ctx))
 
         if self._force_indexes:
-            querystring.write(self._force_index_sql(ctx))
+            querystring.append(self._force_index_sql(ctx))
 
         if self._use_indexes:
-            querystring.write(self._use_index_sql(ctx))
+            querystring.append(self._use_index_sql(ctx))
 
         if self._joins:
             # querystring += " " + " ".join(join.get_sql(ctx) for join in self._joins)
-            querystring.write(" ")
-            querystring.write(" ".join(join.get_sql(ctx) for join in self._joins))
+            querystring.append(" ")
+            querystring.append(" ".join(join.get_sql(ctx) for join in self._joins))
 
         if self._prewheres:
-            querystring.write(self._prewhere_sql(ctx))
+            querystring.append(self._prewhere_sql(ctx))
 
         if self._wheres:
-            querystring.write(self._where_sql(ctx))
+            querystring.append(self._where_sql(ctx))
 
         if self._groupbys:
-            querystring.write(self._group_sql(ctx))
+            querystring.append(self._group_sql(ctx))
             if self._mysql_rollup:
-                querystring.write(self._rollup_sql())
+                querystring.append(self._rollup_sql())
 
         if self._havings:
-            querystring.write(self._having_sql(ctx))
+            querystring.append(self._having_sql(ctx))
 
         if self._orderbys:
-            querystring.write(self._orderby_sql(ctx))
+            querystring.append(self._orderby_sql(ctx))
 
         self._apply_pagination(querystring, ctx)
 
         if self._for_update:
-            querystring.write(self._for_update_sql(ctx))
-
-        querystring_str = querystring.getvalue()
+            querystring.append(self._for_update_sql(ctx))
 
         if ctx.subquery:
-            querystring_str = "({query})".format(query=querystring)
+            querystring.insert(0, "(")
+            querystring.append(")")
+
         if self._on_conflict:
-            querystring_str += self._on_conflict_sql(ctx)
-            querystring_str += self._on_conflict_action_sql(ctx)
+            querystring.append(self._on_conflict_sql(ctx))
+            querystring.append(self._on_conflict_action_sql(ctx))
+
         if ctx.with_alias:
-            return format_alias_sql(querystring_str, self.alias, ctx)
+            return format_alias_sql("".join(querystring), self.alias, ctx)
 
-        return querystring_str
+        return "".join(querystring)
 
-    def _apply_pagination(self, querystring: StringIO, ctx: SqlContext) -> None:
-        querystring.write(self._limit_sql(ctx))
-        querystring.write(self._offset_sql(ctx))
+    def _apply_pagination(self, querystring: list[str], ctx: SqlContext) -> None:
+        querystring.append(self._limit_sql(ctx))
+        querystring.append(self._offset_sql(ctx))
 
     def _with_sql(self, ctx: SqlContext) -> str:
         all_alias = [with_.alias for with_ in self._with]
@@ -1583,13 +1585,15 @@ class QueryBuilder(Selectable, Term):  # type:ignore[misc]
 
         return for_update
 
-    def _select_sql(self, ctx: SqlContext) -> str:
+    def _select_sql(self, querystring: list[str], ctx: SqlContext) -> None:
         select_ctx = ctx.copy(subquery=True, with_alias=True)
-        return (
-            "SELECT "
-            + self._distinct_sql(ctx)
-            + ",".join(term.get_sql(select_ctx) for term in self._selects)
-        )
+        querystring.append("SELECT ")
+        querystring.append(self._distinct_sql(ctx))
+        for i, term in enumerate(self._selects):
+            if i > 0:
+                querystring.append(",")
+            querystring.append(term.get_sql(select_ctx))
+
         # return "SELECT {distinct}{select}".format(
         #     distinct=self._distinct_sql(ctx),
         #     select=",".join(term.get_sql(select_ctx) for term in self._selects),
@@ -1789,7 +1793,9 @@ class Joiner:
         for field in fields:
             consituent = Field(field, table=self.query._from[0]) == Field(field, table=self.item)
             criterion = (
-                consituent if criterion is None else (criterion & consituent)  # type:ignore[operator]
+                consituent
+                if criterion is None
+                else (criterion & consituent)  # type:ignore[operator]
             )
 
         self.query.do_join(JoinOn(self.item, self.how, criterion))  # type:ignore[arg-type]
@@ -2193,8 +2199,7 @@ class CreateQueryBuilder:
 
     def _primary_key_clause(self, ctx: SqlContext) -> str:
         columns = ",".join(
-            column.get_name_sql(ctx)
-            for column in self._primary_key  # type:ignore[union-attr]
+            column.get_name_sql(ctx) for column in self._primary_key  # type:ignore[union-attr]
         )
         return f"PRIMARY KEY ({columns})"
 
